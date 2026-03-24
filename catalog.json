@@ -1,0 +1,62 @@
+[
+    {
+        "name":  "Mutual Non-Disclosure Agreement",
+        "description":  "Common Paper mutual non-disclosure agreement standard terms.",
+        "filename":  "mutual-nda.md"
+    },
+    {
+        "name":  "Mutual Non-Disclosure Agreement Cover Page",
+        "description":  "Cover page template for the Common Paper mutual non-disclosure agreement.",
+        "filename":  "mutual-nda-coverpage.md"
+    },
+    {
+        "name":  "Cloud Service Agreement",
+        "description":  "Common Paper standard cloud service agreement.",
+        "filename":  "cloud-service-agreement.md"
+    },
+    {
+        "name":  "Design Partner Agreement",
+        "description":  "Common Paper standard design partner agreement.",
+        "filename":  "design-partner-agreement.md"
+    },
+    {
+        "name":  "Service Level Agreement",
+        "description":  "Common Paper service level agreement.",
+        "filename":  "service-level-agreement.md"
+    },
+    {
+        "name":  "Professional Services Agreement",
+        "description":  "Common Paper standard professional services agreement.",
+        "filename":  "professional-services-agreement.md"
+    },
+    {
+        "name":  "Data Processing Agreement",
+        "description":  "Common Paper data processing agreement.",
+        "filename":  "data-processing-agreement.md"
+    },
+    {
+        "name":  "Partnership Agreement",
+        "description":  "Common Paper standard partnership agreement.",
+        "filename":  "partnership-agreement.md"
+    },
+    {
+        "name":  "Software License Agreement",
+        "description":  "Common Paper standard software license agreement.",
+        "filename":  "software-license-agreement.md"
+    },
+    {
+        "name":  "Pilot Agreement",
+        "description":  "Common Paper standard pilot agreement.",
+        "filename":  "pilot-agreement.md"
+    },
+    {
+        "name":  "Business Associate Agreement",
+        "description":  "Common Paper standard business associate agreement.",
+        "filename":  "business-associate-agreement.md"
+    },
+    {
+        "name":  "AI Addendum",
+        "description":  "Common Paper standard AI addendum.",
+        "filename":  "ai-addendum.md"
+    }
+]
