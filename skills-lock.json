@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "feature-dev": {
+      "source": "notedit/happy-skills",
+      "sourceType": "github",
+      "computedHash": "ba83158da087e783ad789e598bc3a8ef8dca79e84a235038fb82efc20b73645e"
+    },
+    "generic-fullstack-feature-developer": {
+      "source": "travisjneuman/.claude",
+      "sourceType": "github",
+      "computedHash": "9d3892dc84eeef89a340e179bf59d387c3a4d1ff5ad6aa84de7b5510c055b8e0"
+    }
+  }
+}
