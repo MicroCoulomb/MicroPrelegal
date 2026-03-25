@@ -18,9 +18,22 @@ if (-not $openAiApiKey) {
     throw "OPENAI_API_KEY is missing from $envPath"
 }
 
-docker build -t microprelegal $repoRoot
-try {
-    docker rm -f microprelegal | Out-Null
-} catch {
+cmd /c "docker build -t microprelegal `"$repoRoot`" >nul 2>&1"
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to build the microprelegal image."
 }
-docker run -d --name microprelegal -e OPENAI_API_KEY="$openAiApiKey" -p 8000:8000 microprelegal
+$existingContainer = docker ps -a --filter "name=^/microprelegal$" --format "{{.ID}}"
+if ($existingContainer) {
+    docker rm -f microprelegal *> $null
+}
+$containerId = docker run -d --name microprelegal -e OPENAI_API_KEY="$openAiApiKey" -p 8000:8000 microprelegal 2>$null
+if (-not $containerId) {
+    throw "Failed to start the microprelegal container."
+}
+
+$runningContainer = docker ps --filter "name=^/microprelegal$" --format "{{.ID}}"
+if (-not $runningContainer) {
+    throw "microprelegal did not start successfully."
+}
+
+Write-Host "Application available at http://localhost:8000"

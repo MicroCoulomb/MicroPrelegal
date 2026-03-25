@@ -2,23 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
-
-type ChatMessage = {
-  content: string;
-  role: "assistant" | "user";
-};
-
-type DocumentRef = {
-  description: string;
-  filename: string;
-  name: string;
-};
-
-type DraftingState = {
-  previewContent: string;
-  selectedDocumentFilename: string | null;
-  suggestedDocumentFilename: string | null;
-};
+import {
+  saveDraft,
+  type ChatMessage,
+  type DocumentRef,
+  type DraftDetail,
+  type DraftingState,
+} from "@/lib/session";
 
 type DraftingChatResponse = {
   assistantMessage: string;
@@ -41,6 +31,8 @@ type InlineSegment = {
 
 const INITIAL_ASSISTANT_MESSAGE =
   "Tell me what legal document you need. I can help with the supported documents in the current catalog and I'll guide you with follow-up questions.";
+const DRAFT_DISCLAIMER =
+  "Draft only. This document requires review by qualified legal counsel before signature or reliance.";
 
 const INITIAL_STATE: DraftingState = {
   previewContent: "",
@@ -232,10 +224,16 @@ function MarkdownPreview({ content }: { content: string }) {
   );
 }
 
-export function DocumentWorkspace() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE },
-  ]);
+export function DocumentWorkspace({
+  draft,
+  onDraftSaved,
+  onNewDraft,
+}: {
+  draft: DraftDetail;
+  onDraftSaved: (draft: DraftDetail) => void;
+  onNewDraft: () => Promise<void> | void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [composerValue, setComposerValue] = useState("");
   const [state, setState] = useState<DraftingState>(INITIAL_STATE);
   const [selectedDocument, setSelectedDocument] = useState<DocumentRef | null>(null);
@@ -246,6 +244,26 @@ export function DocumentWorkspace() {
   const [isExporting, setIsExporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    setMessages(
+      draft.messages.length > 0 ? draft.messages : [{ role: "assistant", content: INITIAL_ASSISTANT_MESSAGE }],
+    );
+    setState(
+      draft.messages.length > 0
+        ? draft.state
+        : {
+            ...draft.state,
+            previewContent: draft.previewContent,
+          },
+    );
+    setSelectedDocument(draft.selectedDocument);
+    setSuggestedDocument(draft.suggestedDocument);
+    setStatusNote(draft.statusNote);
+    setIsComplete(draft.isComplete);
+    setComposerValue("");
+    setErrorMessage(null);
+  }, [draft]);
 
   useEffect(() => {
     if (isSending) {
@@ -283,6 +301,7 @@ export function DocumentWorkspace() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           messages: nextMessages,
           state,
@@ -298,16 +317,31 @@ export function DocumentWorkspace() {
         throw new Error(detail);
       }
 
-      setState({
+      const savedMessages: ChatMessage[] = [
+        ...nextMessages,
+        { role: "assistant", content: payload.assistantMessage },
+      ];
+      const nextState = {
         previewContent: payload.previewContent,
         selectedDocumentFilename: payload.selectedDocument?.filename ?? null,
         suggestedDocumentFilename: payload.suggestedDocument?.filename ?? null,
-      });
+      };
+
+      setState(nextState);
       setSelectedDocument(payload.selectedDocument);
       setSuggestedDocument(payload.suggestedDocument);
       setStatusNote(payload.statusNote);
       setIsComplete(payload.isComplete);
-      setMessages([...nextMessages, { role: "assistant", content: payload.assistantMessage }]);
+      setMessages(savedMessages);
+
+      const savedDraft = await saveDraft(draft.id, {
+        isComplete: payload.isComplete,
+        messages: savedMessages,
+        previewContent: payload.previewContent,
+        state: nextState,
+        statusNote: payload.statusNote,
+      });
+      onDraftSaved(savedDraft);
     } catch (error) {
       setMessages(previousMessages);
       setComposerValue(userMessage);
@@ -354,6 +388,21 @@ export function DocumentWorkspace() {
         y = margin;
       };
 
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.setTextColor(180, 83, 9);
+      pdf.text("MICROPRELEGAL DRAFT", margin, y);
+      y += 16;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(120, 113, 108);
+      const disclaimerLines = pdf.splitTextToSize(DRAFT_DISCLAIMER, contentWidth);
+      for (const line of disclaimerLines) {
+        pdf.text(line, margin, y);
+        y += 12;
+      }
+      y += 8;
+
       const blocks = parseMarkdownBlocks(state.previewContent);
       const fileBase =
         selectedDocument?.name
@@ -367,6 +416,7 @@ export function DocumentWorkspace() {
           const lineHeight = block.level === 1 ? 28 : 20;
           pdf.setFont("times", "bold");
           pdf.setFontSize(size);
+          pdf.setTextColor(28, 25, 23);
           const lines = pdf.splitTextToSize(block.content.replace(/\*\*(.+?)\*\*/g, "$1"), contentWidth);
           ensureSpace(lines.length * lineHeight + 10);
           for (const line of lines) {
@@ -380,8 +430,9 @@ export function DocumentWorkspace() {
         if (block.type === "list") {
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(11);
+          pdf.setTextColor(68, 64, 60);
           for (const [index, item] of block.items.entries()) {
-            const prefix = block.ordered ? `${index + 1}.` : "•";
+            const prefix = block.ordered ? `${index + 1}.` : "-";
             const lines = pdf.splitTextToSize(
               `${prefix} ${item.replace(/\*\*(.+?)\*\*/g, "$1")}`,
               contentWidth - 14,
@@ -399,6 +450,7 @@ export function DocumentWorkspace() {
 
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(11);
+        pdf.setTextColor(68, 64, 60);
         const lines = pdf.splitTextToSize(block.content.replace(/\*\*(.+?)\*\*/g, "$1"), contentWidth);
         ensureSpace(lines.length * 16 + 8);
         for (const line of lines) {
@@ -406,6 +458,19 @@ export function DocumentWorkspace() {
           y += 16;
         }
         y += 8;
+      }
+
+      ensureSpace(24);
+      pdf.setDrawColor(231, 229, 228);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 16;
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(9);
+      pdf.setTextColor(120, 113, 108);
+      const footerLines = pdf.splitTextToSize(DRAFT_DISCLAIMER, contentWidth);
+      for (const line of footerLines) {
+        pdf.text(line, margin, y);
+        y += 12;
       }
 
       pdf.save(`${fileBase}.pdf`);
@@ -423,6 +488,22 @@ export function DocumentWorkspace() {
   return (
     <section className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1.38fr)]">
       <section className="flex flex-col rounded-[2rem] border border-stone-200/80 bg-white/90 p-6 shadow-[0_24px_80px_rgba(120,53,15,0.12)] backdrop-blur lg:h-[calc(100vh-12rem)]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+              Active draft
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-stone-950">{draft.title}</h2>
+          </div>
+          <button
+            className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-500"
+            onClick={() => void onNewDraft()}
+            type="button"
+          >
+            Start new draft
+          </button>
+        </div>
+
         <div className="flex min-h-0 flex-1 flex-col rounded-[1.5rem] border border-stone-200 bg-stone-50 p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -444,6 +525,10 @@ export function DocumentWorkspace() {
             >
               {isComplete ? "Draft ready" : "In progress"}
             </div>
+          </div>
+
+          <div className="mb-4 rounded-[1.25rem] border border-[#f3dba5] bg-[#fff8e6] px-4 py-3 text-sm leading-6 text-[#77520c]">
+            {DRAFT_DISCLAIMER}
           </div>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -519,8 +604,11 @@ export function DocumentWorkspace() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <article className="mx-auto w-full max-w-5xl rounded-[1.75rem] border border-[#e7e5e4] bg-white px-6 py-8 text-[#1c1917] shadow-[0_28px_60px_rgba(28,25,23,0.08)] sm:px-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b45309]">
+            <p className="rounded-full bg-[#fff8e6] px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[#b45309]">
               Draft preview
+            </p>
+            <p className="mt-4 rounded-[1.25rem] border border-[#f3dba5] bg-[#fff8e6] px-4 py-3 text-sm leading-6 text-[#77520c]">
+              {DRAFT_DISCLAIMER}
             </p>
             <MarkdownPreview content={previewContent} />
           </article>

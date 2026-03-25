@@ -23,4 +23,5 @@ fi
 
 docker build -t microprelegal "${REPO_ROOT}"
 docker rm -f microprelegal >/dev/null 2>&1 || true
-docker run -d --name microprelegal -e OPENAI_API_KEY="${OPENAI_API_KEY}" -p 8000:8000 microprelegal
+docker run -d --name microprelegal -e OPENAI_API_KEY="${OPENAI_API_KEY}" -p 8000:8000 microprelegal >/dev/null
+echo "Application available at http://localhost:8000"

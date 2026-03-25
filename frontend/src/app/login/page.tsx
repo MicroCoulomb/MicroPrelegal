@@ -1,5 +1,5 @@
-import { FakeLogin } from "@/components/fake-login";
+import { AuthForm } from "@/components/auth-form";
 
 export default function LoginPage() {
-  return <FakeLogin />;
+  return <AuthForm mode="signin" />;
 }

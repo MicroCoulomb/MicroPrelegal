@@ -1,5 +1,8 @@
 """SQLite schema for the temporary application database."""
 
+DROP_DRAFT_MESSAGES_TABLE_SQL = "DROP TABLE IF EXISTS draft_messages;"
+DROP_DRAFTS_TABLE_SQL = "DROP TABLE IF EXISTS drafts;"
+DROP_SESSIONS_TABLE_SQL = "DROP TABLE IF EXISTS sessions;"
 DROP_USERS_TABLE_SQL = "DROP TABLE IF EXISTS users;"
 
 CREATE_USERS_TABLE_SQL = """
@@ -7,6 +10,44 @@ CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+CREATE_SESSIONS_TABLE_SQL = """
+CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+"""
+
+CREATE_DRAFTS_TABLE_SQL = """
+CREATE TABLE drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    selected_document_filename TEXT,
+    suggested_document_filename TEXT,
+    preview_content TEXT NOT NULL DEFAULT '',
+    status_note TEXT NOT NULL DEFAULT '',
+    is_complete INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+"""
+
+CREATE_DRAFT_MESSAGES_TABLE_SQL = """
+CREATE TABLE draft_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    draft_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
 );
 """

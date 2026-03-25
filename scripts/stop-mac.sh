@@ -6,3 +6,4 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 docker rm -f microprelegal >/dev/null 2>&1 || true
+echo "Stopped microprelegal."

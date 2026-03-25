@@ -34,6 +34,13 @@ class StubDraftingService:
         )
 
 
+def create_user(client: TestClient, *, name="Avery Stone", email="avery@example.com", password="password123"):
+    return client.post(
+        "/api/auth/signup",
+        json={"name": name, "email": email, "password": password},
+    )
+
+
 def test_healthcheck_returns_ok():
     with TestClient(app) as client:
         response = client.get("/api/health")
@@ -42,18 +49,18 @@ def test_healthcheck_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
-def test_startup_resets_database_with_users_table():
+def test_startup_resets_database_with_required_tables():
     with TestClient(app):
         pass
 
     assert DATABASE_PATH.exists()
 
     with sqlite3.connect(DATABASE_PATH) as connection:
-        row = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'"
-        ).fetchone()
+        rows = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'sessions', 'drafts', 'draft_messages')"
+        ).fetchall()
 
-    assert row == ("users",)
+    assert {row[0] for row in rows} == {"users", "sessions", "drafts", "draft_messages"}
 
 
 def test_workspace_route_falls_back_to_frontend_html_when_static_build_exists(tmp_path, monkeypatch):
@@ -76,6 +83,118 @@ def test_catalog_loader_returns_supported_documents():
     assert len(documents) == 12
     assert any(document.filename == "mutual-nda.md" for document in documents)
     assert any(document.filename == "pilot-agreement.md" for document in documents)
+
+
+def test_sign_up_creates_user_and_session_cookie():
+    with TestClient(app) as client:
+        response = create_user(client)
+
+    assert response.status_code == 201
+    assert response.json()["user"]["email"] == "avery@example.com"
+    assert "microprelegal_session" in response.cookies
+
+
+def test_sign_up_rejects_duplicate_email():
+    with TestClient(app) as client:
+        first = create_user(client)
+        second = create_user(client)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+
+
+def test_sign_in_rejects_wrong_password():
+    with TestClient(app) as client:
+        create_user(client)
+        response = client.post(
+            "/api/auth/signin",
+            json={"email": "avery@example.com", "password": "wrong-pass"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_session_endpoint_requires_authentication():
+    with TestClient(app) as client:
+        response = client.get("/api/auth/session")
+
+    assert response.status_code == 401
+
+
+def test_session_endpoint_returns_current_user():
+    with TestClient(app) as client:
+        create_user(client)
+        response = client.get("/api/auth/session")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user": {
+            "id": 1,
+            "name": "Avery Stone",
+            "email": "avery@example.com",
+        }
+    }
+
+
+def test_create_and_update_draft_restores_full_session():
+    with TestClient(app) as client:
+        create_user(client)
+        created = client.post("/api/drafts")
+        assert created.status_code == 201
+        draft_id = created.json()["draft"]["id"]
+
+        update = client.put(
+            f"/api/drafts/{draft_id}",
+            json={
+                "messages": [
+                    {"role": "assistant", "content": "Tell me what document you need."},
+                    {"role": "user", "content": "I need a cloud service agreement."},
+                    {"role": "assistant", "content": "What is the subscription period?"},
+                ],
+                "state": {
+                    "selectedDocumentFilename": "cloud-service-agreement.md",
+                    "suggestedDocumentFilename": None,
+                    "previewContent": "# Cloud Service Agreement\n\nCustomer: [Customer]",
+                },
+                "previewContent": "# Cloud Service Agreement\n\nCustomer: [Customer]",
+                "isComplete": False,
+                "statusNote": "Cloud Service Agreement selected.",
+            },
+        )
+        loaded = client.get(f"/api/drafts/{draft_id}")
+
+    assert update.status_code == 200
+    assert loaded.status_code == 200
+    payload = loaded.json()["draft"]
+    assert payload["selectedDocument"]["filename"] == "cloud-service-agreement.md"
+    assert payload["messages"][1]["content"] == "I need a cloud service agreement."
+    assert payload["previewContent"].startswith("# Cloud Service Agreement")
+
+
+def test_list_drafts_only_returns_current_users_drafts():
+    with TestClient(app) as first_client:
+        create_user(first_client, email="first@example.com")
+        first_client.post("/api/drafts")
+
+    with TestClient(app) as second_client:
+        create_user(second_client, email="second@example.com")
+        second_response = second_client.get("/api/drafts")
+
+    assert second_response.status_code == 200
+    assert second_response.json() == {"drafts": []}
+
+
+def test_draft_access_rejects_non_owner():
+    with TestClient(app) as first_client:
+        create_user(first_client, email="first@example.com")
+        created = first_client.post("/api/drafts")
+        draft_id = created.json()["draft"]["id"]
+
+    with TestClient(app) as second_client:
+        create_user(second_client, email="second@example.com")
+        response = second_client.get(f"/api/drafts/{draft_id}")
+
+    assert response.status_code == 404
 
 
 def test_drafting_chat_returns_selected_document_preview():
